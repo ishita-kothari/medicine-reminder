@@ -31,7 +31,8 @@
       "extends": "base",
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "credentialsSource": "local"
       },
       "ios": {
         "resourceClass": "m-medium"

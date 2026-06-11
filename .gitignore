@@ -14,3 +14,6 @@ web-build/
 .env.production
 coverage/
 *.log
+*.keystore
+*.keystore.b64
+credentials.json
