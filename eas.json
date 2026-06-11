@@ -5,14 +5,7 @@
     "appVersionSource": "local"
   },
   "build": {
-    "base": {
-      "node": "22.18.0",
-      "env": {
-        "NODE_ENV": "production"
-      }
-    },
     "development": {
-      "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
@@ -21,14 +14,9 @@
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleDebug"
-      },
-      "env": {
-        "APP_ENV": "development",
-        "NODE_ENV": "development"
       }
     },
     "preview": {
-      "extends": "base",
       "distribution": "internal",
       "android": {
         "buildType": "apk",
@@ -42,10 +30,10 @@
       }
     },
     "production": {
-      "extends": "base",
       "autoIncrement": true,
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "credentialsSource": "local"
       },
       "ios": {
         "resourceClass": "m-medium"
