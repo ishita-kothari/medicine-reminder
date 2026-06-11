@@ -20,7 +20,10 @@
       "bundleIdentifier": "com.seniorcare.companion",
       "buildNumber": "1",
       "infoPlist": {
-        "UIBackgroundModes": ["fetch", "remote-notification"],
+        "UIBackgroundModes": [
+          "fetch",
+          "remote-notification"
+        ],
         "NSContactsUsageDescription": "Used to import caregiver contact information.",
         "NSSpeechRecognitionUsageDescription": "Used for voice-guided medication reminders.",
         "NSMicrophoneUsageDescription": "Required for voice guidance features."
@@ -57,6 +60,12 @@
       ],
       "expo-task-manager",
       "expo-status-bar"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3624f24e-b2be-4c43-a010-34838fd6de91"
+      }
+    },
+    "owner": "ishitak"
   }
 }
