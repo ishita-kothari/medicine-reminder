@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "SeniorCare Companion",
+    "slug": "senior-care-companion",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1A6B4A"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.seniorcare.companion",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "fetch",
+          "remote-notification"
+        ],
+        "NSContactsUsageDescription": "Used to import caregiver contact information.",
+        "NSSpeechRecognitionUsageDescription": "Used for voice-guided medication reminders.",
+        "NSMicrophoneUsageDescription": "Required for voice guidance features."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1A6B4A"
+      },
+      "package": "com.seniorcare.companion",
+      "permissions": [
+        "NOTIFICATIONS",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "READ_CONTACTS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#1A6B4A",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "SeniorCare Reminder"
+        }
+      ],
+      "expo-task-manager",
+      "expo-status-bar"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "your-eas-project-id"
+      }
+    }
+  }
+}

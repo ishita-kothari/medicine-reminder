@@ -1,0 +1,15 @@
+module.exports = {
+  setNotificationHandler: jest.fn(),
+  requestPermissionsAsync: jest.fn().mockResolvedValue({ status: 'granted' }),
+  getPermissionsAsync: jest.fn().mockResolvedValue({ status: 'granted' }),
+  scheduleNotificationAsync: jest.fn().mockResolvedValue('mock-notification-id'),
+  cancelScheduledNotificationAsync: jest.fn().mockResolvedValue(undefined),
+  cancelAllScheduledNotificationsAsync: jest.fn().mockResolvedValue(undefined),
+  getPendingNotificationRequestsAsync: jest.fn().mockResolvedValue([]),
+  setBadgeCountAsync: jest.fn().mockResolvedValue(undefined),
+  setNotificationChannelAsync: jest.fn().mockResolvedValue(undefined),
+  addNotificationResponseReceivedListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+  addNotificationReceivedListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+  AndroidImportance: { MAX: 5, HIGH: 4, DEFAULT: 3, LOW: 2, MIN: 1 },
+  SchedulableTriggerInputTypes: { CALENDAR: 'calendar', DATE: 'date' },
+};
