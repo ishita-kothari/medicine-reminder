@@ -36,4 +36,6 @@ export type WellnessStackParamList = {
 export type SettingsStackParamList = {
   Settings: undefined;
   AccessibilitySettings: undefined;
+  EditProfile: undefined;
+  DataExport: undefined;
 };

@@ -59,7 +59,8 @@
         }
       ],
       "expo-task-manager",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-sharing"
     ],
     "extra": {
       "eas": {

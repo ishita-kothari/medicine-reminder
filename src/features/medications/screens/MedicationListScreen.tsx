@@ -1,5 +1,12 @@
-import React, { useState } from 'react';
-import { View, FlatList, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import {
+  View,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  TextInput,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAppSelector } from '../../../hooks/useAppSelector';
@@ -16,6 +23,8 @@ import { formatTimeFromHHMM } from '../../../utils/dateHelpers';
 
 type Nav = StackNavigationProp<MedicationsStackParamList>;
 
+type SortOrder = 'name' | 'time' | 'added';
+
 const FORM_TYPE_ICON: Record<string, string> = {
   tablet: '⬜', capsule: '💊', liquid: '🧴', drop: '💧',
   injection: '💉', inhaler: '🌬️', patch: '🩹', powder: '🫙',
@@ -27,6 +36,8 @@ export default function MedicationListScreen() {
   const dispatch = useAppDispatch();
   const { colors, textScale } = useAccessibility();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('added');
 
   const medicationIds = useAppSelector((s) => s.medications.order);
   const medications = useAppSelector((s) => s.medications.items);
@@ -35,11 +46,42 @@ export default function MedicationListScreen() {
   const getReminderCount = (medId: string) =>
     Object.values(allReminders).filter((r) => r.medicationId === medId && r.isActive).length;
 
-  const getNextReminderTime = (medId: string): string | undefined =>
-    Object.values(allReminders)
+  const getNextReminderTime = (medId: string): string | undefined => {
+    const times = Object.values(allReminders)
       .filter((r) => r.medicationId === medId && r.isActive)
-      .map((r) => r.scheduledTime)
-      .sort()[0];
+      .flatMap((r) => r.scheduledTimes ?? [])
+      .sort();
+    return times[0];
+  };
+
+  // Search + sort
+  const filteredIds = useMemo(() => {
+    let ids = [...medicationIds];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      ids = ids.filter((id) => {
+        const m = medications[id];
+        return (
+          m?.name.toLowerCase().includes(q) ||
+          m?.medicineType?.toLowerCase().includes(q) ||
+          m?.dosage?.toLowerCase().includes(q)
+        );
+      });
+    }
+    if (sortOrder === 'name') {
+      ids.sort((a, b) =>
+        (medications[a]?.name ?? '').localeCompare(medications[b]?.name ?? '')
+      );
+    } else if (sortOrder === 'time') {
+      ids.sort((a, b) => {
+        const ta = getNextReminderTime(a) ?? '99:99';
+        const tb = getNextReminderTime(b) ?? '99:99';
+        return ta.localeCompare(tb);
+      });
+    }
+    // 'added' keeps insertion order (medicationIds order)
+    return ids;
+  }, [medicationIds, medications, search, sortOrder]);
 
   const handleDelete = () => {
     if (confirmDeleteId) {
@@ -64,17 +106,66 @@ export default function MedicationListScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Search bar */}
+      <View style={[styles.searchBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={styles.searchIcon} accessible={false}>🔍</Text>
+        <TextInput
+          accessible
+          accessibilityLabel="Search medicines"
+          accessibilityHint="Type to filter your medicine list"
+          placeholder="Search by name or type..."
+          placeholderTextColor={colors.textDisabled}
+          value={search}
+          onChangeText={setSearch}
+          style={[styles.searchInput, { color: colors.text, fontSize: Typography.body.fontSize * textScale }]}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+        />
+      </View>
+
+      {/* Sort chips */}
+      <View style={styles.sortRow}>
+        <Text style={[styles.sortLabel, { color: colors.textSecondary }]}>Sort:</Text>
+        {(['added', 'name', 'time'] as SortOrder[]).map((s) => (
+          <TouchableOpacity
+            key={s}
+            accessible
+            accessibilityRole="radio"
+            accessibilityLabel={`Sort by ${s}`}
+            accessibilityState={{ selected: sortOrder === s }}
+            onPress={() => setSortOrder(s)}
+            style={[
+              styles.sortChip,
+              {
+                backgroundColor: sortOrder === s ? colors.primary : colors.surfaceVariant,
+                borderColor: sortOrder === s ? colors.primary : colors.border,
+              },
+            ]}
+          >
+            <Text style={[styles.sortChipText, { color: sortOrder === s ? '#FFF' : colors.text }]}>
+              {s === 'added' ? 'Recent' : s === 'name' ? 'A–Z' : 'Next dose'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <FlatList
-        data={medicationIds}
+        data={filteredIds}
         keyExtractor={(id) => id}
         removeClippedSubviews={false}
         contentContainerStyle={styles.list}
+        ListEmptyComponent={
+          <Text style={[styles.noResults, { color: colors.textSecondary }]}>
+            No medicines match "{search}"
+          </Text>
+        }
         renderItem={({ item: id }) => {
           const med = medications[id];
           if (!med) return null;
           const reminderCount = getReminderCount(id);
           const nextTime = getNextReminderTime(id);
           const hasReminders = reminderCount > 0;
+          const lowPills = med.pillCount > 0 && med.pillCount <= med.refillAt;
 
           return (
             <View
@@ -82,11 +173,20 @@ export default function MedicationListScreen() {
                 styles.card,
                 {
                   backgroundColor: colors.surface,
-                  borderColor: colors.border,
+                  borderColor: lowPills ? colors.warning : colors.border,
                   shadowColor: colors.cardShadow,
                 },
               ]}
             >
+              {/* Low pill warning banner */}
+              {lowPills && (
+                <View style={[styles.refillBanner, { backgroundColor: colors.warningLight }]}>
+                  <Text style={[styles.refillText, { color: colors.warning }]}>
+                    ⚠️ Only {med.pillCount} pill{med.pillCount !== 1 ? 's' : ''} left — time to refill
+                  </Text>
+                </View>
+              )}
+
               {/* Top row: icon + name + dosage */}
               <View style={styles.cardTop}>
                 <View style={[styles.colorBadge, { backgroundColor: med.color }]}>
@@ -97,7 +197,6 @@ export default function MedicationListScreen() {
                 <View style={styles.medInfo}>
                   <Text
                     accessible
-                    accessibilityRole="text"
                     style={[styles.medName, { color: colors.text, fontSize: Typography.large.fontSize * textScale }]}
                     numberOfLines={1}
                   >
@@ -106,11 +205,11 @@ export default function MedicationListScreen() {
                   <Text style={[styles.medDose, { color: colors.textSecondary, fontSize: Typography.body.fontSize * textScale }]}>
                     {med.dosage} {med.unit} · {med.medicineType}
                   </Text>
-                  {med.instructions ? (
-                    <Text style={[styles.medInstructions, { color: colors.textSecondary, fontSize: Typography.label.fontSize }]} numberOfLines={1}>
-                      {med.instructions}
+                  {med.pillCount > 0 && (
+                    <Text style={[styles.pillCount, { color: lowPills ? colors.warning : colors.textSecondary }]}>
+                      💊 {med.pillCount} remaining
                     </Text>
-                  ) : null}
+                  )}
                 </View>
               </View>
 
@@ -120,8 +219,8 @@ export default function MedicationListScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={
                   hasReminders
-                    ? `${reminderCount} reminder${reminderCount > 1 ? 's' : ''} set. Next at ${nextTime ? formatTimeFromHHMM(nextTime) : 'unknown'}. Tap to manage reminders.`
-                    : 'No reminders set. Tap to add a reminder.'
+                    ? `${reminderCount} reminder${reminderCount > 1 ? 's' : ''} set. Next at ${nextTime ? formatTimeFromHHMM(nextTime) : 'unknown'}. Tap to manage.`
+                    : 'No reminders set. Tap to add one.'
                 }
                 onPress={() => navigation.navigate('ReminderList', { medicationId: id })}
                 style={[
@@ -150,7 +249,7 @@ export default function MedicationListScreen() {
                     </>
                   ) : (
                     <Text style={[styles.reminderOff, { color: colors.warning, fontSize: Typography.label.fontSize * textScale }]}>
-                      No reminder set — tap to add one
+                      No reminder — tap to add one
                     </Text>
                   )}
                 </View>
@@ -161,12 +260,12 @@ export default function MedicationListScreen() {
               <View style={styles.actions}>
                 {!hasReminders && (
                   <BigButton
-                    label="+ Add Reminder"
+                    label="+ Reminder"
                     onPress={() => navigation.navigate('AddReminder', { medicationId: id })}
                     variant="primary"
                     size="normal"
                     style={styles.actionBtn}
-                    accessibilityHint={`Double-tap to add a reminder for ${med.name}`}
+                    accessibilityHint={`Add a reminder for ${med.name}`}
                   />
                 )}
                 <BigButton
@@ -175,7 +274,7 @@ export default function MedicationListScreen() {
                   variant="secondary"
                   size="normal"
                   style={styles.actionBtn}
-                  accessibilityHint={`Double-tap to edit ${med.name}`}
+                  accessibilityHint={`Edit ${med.name}`}
                 />
                 <BigButton
                   label="Delete"
@@ -183,17 +282,12 @@ export default function MedicationListScreen() {
                   variant="danger"
                   size="normal"
                   style={styles.actionBtn}
-                  accessibilityHint={`Double-tap to delete ${med.name}`}
+                  accessibilityHint={`Delete ${med.name}`}
                 />
               </View>
             </View>
           );
         }}
-        ListHeaderComponent={
-          <Text style={[styles.count, { color: colors.textSecondary, fontSize: Typography.body.fontSize * textScale }]}>
-            {medicationIds.length} medicine{medicationIds.length !== 1 ? 's' : ''} tracked
-          </Text>
-        }
       />
 
       <View style={[styles.fab, { backgroundColor: colors.background, borderTopColor: colors.divider }]}>
@@ -202,16 +296,14 @@ export default function MedicationListScreen() {
           onPress={() => navigation.navigate('AddMedication')}
           variant="primary"
           size="large"
-          accessibilityHint="Double-tap to add a new medication"
+          accessibilityHint="Add a new medication"
         />
       </View>
 
       <ConfirmationModal
         visible={!!confirmDeleteId}
         title="Delete Medicine?"
-        message={`Are you sure you want to delete ${
-          confirmDeleteId ? (medications[confirmDeleteId]?.name ?? 'this medicine') : 'this medicine'
-        }? All reminders will also be removed.`}
+        message={`Are you sure you want to delete ${confirmDeleteId ? (medications[confirmDeleteId]?.name ?? 'this medicine') : 'this medicine'}? All reminders will also be removed.`}
         confirmLabel="Delete"
         cancelLabel="Keep"
         dangerous
@@ -224,8 +316,35 @@ export default function MedicationListScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  list: { padding: Spacing.md, paddingBottom: 110 },
-  count: { paddingBottom: Spacing.sm },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: Spacing.md,
+    marginBottom: Spacing.xs,
+    borderWidth: 1,
+    borderRadius: Layout.inputBorderRadius,
+    paddingHorizontal: Spacing.sm,
+    height: 52,
+  },
+  searchIcon: { fontSize: 18, marginRight: Spacing.xs },
+  searchInput: { flex: 1, height: 52 },
+  sortRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.xs,
+    gap: Spacing.xs,
+  },
+  sortLabel: { fontSize: 13, fontWeight: '600' },
+  sortChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  sortChipText: { fontSize: 13, fontWeight: '600' },
+  list: { paddingTop: Spacing.xs, paddingBottom: 110, paddingHorizontal: Spacing.md },
+  noResults: { textAlign: 'center', marginTop: Spacing.xl, fontSize: 16 },
 
   card: {
     borderRadius: Layout.cardBorderRadius,
@@ -234,38 +353,22 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...Shadows.card,
   },
-
-  // Top section
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.md,
-    gap: Spacing.sm,
+  refillBanner: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
   },
-  colorBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
+  refillText: { fontSize: 13, fontWeight: '700' },
+  cardTop: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, gap: Spacing.sm },
+  colorBadge: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   formIcon: { fontSize: 24 },
   medInfo: { flex: 1 },
   medName: { fontWeight: '700', marginBottom: 2 },
   medDose: { marginBottom: 2 },
-  medInstructions: { fontStyle: 'italic' },
-
-  // Reminder row
+  pillCount: { fontSize: 13, fontWeight: '600', marginTop: 2 },
   reminderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    gap: Spacing.sm,
-    minHeight: 52,
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md,
+    borderTopWidth: 1, borderBottomWidth: 1, gap: Spacing.sm, minHeight: 52,
   },
   reminderIcon: { fontSize: 20 },
   reminderText: { flex: 1 },
@@ -273,21 +376,7 @@ const styles = StyleSheet.create({
   reminderNext: {},
   reminderOff: { fontWeight: '600' },
   chevron: { fontSize: 22, fontWeight: '300' },
-
-  // Actions
-  actions: {
-    flexDirection: 'row',
-    gap: Spacing.xs,
-    padding: Spacing.sm,
-    flexWrap: 'wrap',
-  },
+  actions: { flexDirection: 'row', gap: Spacing.xs, padding: Spacing.sm, flexWrap: 'wrap' },
   actionBtn: { flex: 1, minWidth: 80 },
-
-  // FAB
-  fab: {
-    position: 'absolute',
-    bottom: 0, left: 0, right: 0,
-    padding: Spacing.md,
-    borderTopWidth: 1,
-  },
+  fab: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: Spacing.md, borderTopWidth: 1 },
 });

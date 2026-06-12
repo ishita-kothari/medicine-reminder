@@ -40,7 +40,8 @@ import {
   addReminderEvent,
   autoMarkExpiredSnoozedMissed,
 } from '../../../store/slices/remindersSlice';
-import { recordDoseTaken } from '../../../store/slices/achievementsSlice';
+import { recordDoseTaken, checkPerfectPeriods } from '../../../store/slices/achievementsSlice';
+import { decrementPillCount } from '../../../store/slices/medicationsSlice';
 import { notificationService } from '../../../services/NotificationService';
 import BigButton from '../../../components/BigButton';
 import ReminderAlertModal from '../../../components/ReminderAlertModal';
@@ -165,9 +166,10 @@ export default function HomeScreen() {
     );
   }, [todaysSchedule]);
 
-  // ── Auto-mark expired snoozed events ─────────────────────────────────────
+  // ── Auto-mark expired snoozed events + check perfect badges ─────────────
   useEffect(() => {
     dispatch(autoMarkExpiredSnoozedMissed());
+    dispatch(checkPerfectPeriods(allEvents));
   }, []);
 
   // ── Live countdown ticker ─────────────────────────────────────────────────
@@ -214,12 +216,31 @@ export default function HomeScreen() {
       }
       dispatch(markTaken({ reminderId: reminder.id, eventId }));
       dispatch(recordDoseTaken());
+      // Decrement pill count so refill warnings stay accurate
+      dispatch(decrementPillCount(reminder.medicationId));
       notificationService.cancelReminder(reminder.notificationIds);
-      speak(
-        `${medicationItems[reminder.medicationId]?.name ?? 'Medication'} marked as taken. Well done!`
-      );
+      const med = medicationItems[reminder.medicationId];
+      speak(`${med?.name ?? 'Medication'} marked as taken. Well done!`);
+      // Warn if pills running low after this dose
+      if (med && med.pillCount > 0 && med.pillCount - 1 <= med.refillAt && med.pillCount - 1 > 0) {
+        setTimeout(() => speak(`Only ${med.pillCount - 1} pills of ${med.name} remaining. Time to refill.`), 2000);
+      }
     },
     [dispatch, haptic, speak, medicationItems, today]
+  );
+
+  /** Mark all pending slots for a specific time as taken (bulk action) */
+  const confirmAllAtTime = useCallback(
+    (timeSlot: string) => {
+      const slotsAtTime = todaysSchedule.filter(
+        (s) => s.timeSlot === timeSlot && !slotIsDone(s)
+      );
+      if (slotsAtTime.length === 0) return;
+      haptic('heavy');
+      slotsAtTime.forEach((slot) => confirmTaken(slot.reminder, slot.timeSlot, slot.eventForToday?.id));
+      speak(`All ${timeSlot} medicines marked as taken.`);
+    },
+    [todaysSchedule, haptic, speak, confirmTaken]
   );
 
   /**
@@ -476,9 +497,37 @@ export default function HomeScreen() {
               Today's Schedule
             </Text>
             <Text style={[styles.scheduleHint, { color: colors.textSecondary }]}>
-              Tap ✓ to mark a dose as taken
+              Tap ✓ to mark a dose, or use "Mark all" for the same time
             </Text>
-            {todaysSchedule.map((slot) => {
+            {/* Group by time slot and show bulk-action header per time */}
+            {(() => {
+              const times = [...new Set(todaysSchedule.map((s) => s.timeSlot))];
+              return times.map((time) => {
+                const slotsAtTime = todaysSchedule.filter((s) => s.timeSlot === time);
+                const allDone = slotsAtTime.every((s) => slotIsDone(s));
+                const pendingCount = slotsAtTime.filter((s) => !slotIsDone(s)).length;
+                return (
+                  <View key={time}>
+                    {/* Time group header with bulk Mark All button */}
+                    <View style={[styles.timeGroupHeader, { borderColor: colors.divider }]}>
+                      <Text style={[styles.timeGroupLabel, { color: colors.textSecondary }]}>
+                        {formatTimeFromHHMM(time)} — {slotsAtTime.length} medicine{slotsAtTime.length !== 1 ? 's' : ''}
+                      </Text>
+                      {!allDone && pendingCount > 1 && (
+                        <TouchableOpacity
+                          accessible
+                          accessibilityRole="button"
+                          accessibilityLabel={`Mark all ${pendingCount} medicines at ${formatTimeFromHHMM(time)} as taken`}
+                          accessibilityHint="Double-tap to mark all medicines at this time as taken at once"
+                          onPress={() => confirmAllAtTime(time)}
+                          style={[styles.markAllBtn, { backgroundColor: colors.primary }]}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={styles.markAllText}>Mark all ✓</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    {slotsAtTime.map((slot) => {
               const done = slotIsDone(slot);
               const icon = slotStatusIcon(slot);
               return (
@@ -523,6 +572,10 @@ export default function HomeScreen() {
                 </View>
               );
             })}
+                  </View>
+                );
+              });
+            })()}
           </View>
         )}
       </ScrollView>
@@ -594,6 +647,14 @@ const styles = StyleSheet.create({
   scheduleSection: { marginTop: Spacing.xs },
   scheduleTitle: { fontWeight: '700', marginBottom: 4 },
   scheduleHint: { fontSize: 13, marginBottom: Spacing.sm },
+  timeGroupHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6, borderBottomWidth: 1, marginBottom: 4, marginTop: Spacing.xs,
+  },
+  timeGroupLabel: { fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
+  markAllBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8 },
+  markAllText: { color: '#FFF', fontSize: 13, fontWeight: '800' },
   scheduleItem: {
     flexDirection: 'row',
     alignItems: 'center',

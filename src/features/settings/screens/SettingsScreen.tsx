@@ -9,7 +9,7 @@ import { toggleDarkMode, toggleVoiceGuidance, toggleVibration } from '../../../s
 import { SettingsStackParamList } from '../../../types';
 import ToggleRow from '../components/ToggleRow';
 import AdBanner from '../../../components/AdBanner';
-import { Spacing } from '../../../theme/spacing';
+import { Spacing, Layout } from '../../../theme/spacing';
 import { Typography } from '../../../theme/typography';
 
 type Nav = StackNavigationProp<SettingsStackParamList>;
@@ -20,11 +20,31 @@ export default function SettingsScreen() {
   const { colors, textScale } = useAccessibility();
 
   const { darkMode, voiceGuidance, vibration } = useAppSelector((s) => s.settings);
-  const userName = useAppSelector((s) => s.user.name);
+  const user = useAppSelector((s) => s.user);
+
+  const NavRow = ({ label, desc, screen }: { label: string; desc?: string; screen: keyof SettingsStackParamList }) => (
+    <TouchableOpacity
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={`Double-tap to open ${label}`}
+      onPress={() => navigation.navigate(screen as any)}
+      style={[styles.navRow, { borderBottomColor: colors.divider }]}
+      activeOpacity={0.7}
+    >
+      <View style={styles.navTextGroup}>
+        <Text style={[styles.navLabel, { color: colors.text, fontSize: Typography.body.fontSize * textScale }]}>
+          {label}
+        </Text>
+        {desc ? <Text style={[styles.navDesc, { color: colors.textSecondary }]}>{desc}</Text> : null}
+      </View>
+      <Text style={[styles.navChevron, { color: colors.textSecondary }]}>›</Text>
+    </TouchableOpacity>
+  );
 
   const sectionLabel = (text: string) => (
     <Text
-      accessible={true}
+      accessible
       accessibilityRole="header"
       style={[styles.sectionLabel, { color: colors.textSecondary, fontSize: Typography.label.fontSize * textScale }]}
     >
@@ -34,13 +54,28 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-      {userName ? (
-        <View style={[styles.profileCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      {/* Profile card */}
+      <View style={[styles.profileCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={styles.profileInfo}>
           <Text style={[styles.profileName, { color: colors.text, fontSize: Typography.heading.fontSize * textScale }]}>
-            {userName}
+            {user.name || 'Your Profile'}
           </Text>
+          {user.emergencyContact ? (
+            <Text style={[styles.profileSub, { color: colors.textSecondary }]}>
+              SOS: {user.emergencyContact}
+            </Text>
+          ) : null}
         </View>
-      ) : null}
+        <TouchableOpacity
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel="Edit profile"
+          onPress={() => navigation.navigate('EditProfile')}
+          style={[styles.editBtn, { backgroundColor: colors.surfaceVariant }]}
+        >
+          <Text style={[styles.editBtnText, { color: colors.primary }]}>Edit</Text>
+        </TouchableOpacity>
+      </View>
 
       {sectionLabel('Display')}
       <View style={[styles.section, { backgroundColor: colors.surface }]}>
@@ -70,20 +105,12 @@ export default function SettingsScreen() {
 
       {sectionLabel('Accessibility')}
       <View style={[styles.section, { backgroundColor: colors.surface }]}>
-        <TouchableOpacity
-          accessible={true}
-          accessibilityRole="button"
-          accessibilityLabel="Accessibility settings"
-          accessibilityHint="Double-tap to open accessibility options including high contrast and large text"
-          onPress={() => navigation.navigate('AccessibilitySettings')}
-          style={[styles.navRow, { borderBottomColor: colors.divider }]}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.navLabel, { color: colors.text, fontSize: Typography.body.fontSize * textScale }]}>
-            Accessibility Options
-          </Text>
-          <Text style={[styles.navChevron, { color: colors.textSecondary }]}>›</Text>
-        </TouchableOpacity>
+        <NavRow label="Accessibility Options" desc="High contrast, large text, font size" screen="AccessibilitySettings" />
+      </View>
+
+      {sectionLabel('Data')}
+      <View style={[styles.section, { backgroundColor: colors.surface }]}>
+        <NavRow label="Export Dose History" desc="Share a CSV report with your doctor" screen="DataExport" />
       </View>
 
       <AdBanner screenName="SettingsFooter" position="bottom" />
@@ -100,34 +127,31 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   profileCard: {
-    margin: Spacing.md,
-    padding: Spacing.md,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  profileName: { ...Typography.heading },
-  sectionLabel: {
-    marginTop: Spacing.lg,
-    marginBottom: Spacing.xs,
-    marginHorizontal: Spacing.md,
-    letterSpacing: 1,
-  },
-  section: {
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: 'transparent',
-    marginBottom: Spacing.xs,
-  },
-  navRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    borderBottomWidth: 1,
-    minHeight: 70,
+    margin: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: Layout.cardBorderRadius,
+    borderWidth: 1,
   },
-  navLabel: { ...Typography.body, fontWeight: '600' },
+  profileInfo: { flex: 1 },
+  profileName: { fontWeight: '700' },
+  profileSub: { fontSize: 13, marginTop: 2 },
+  editBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 },
+  editBtnText: { fontSize: 14, fontWeight: '700' },
+  sectionLabel: {
+    marginTop: Spacing.lg, marginBottom: Spacing.xs,
+    marginHorizontal: Spacing.md, letterSpacing: 1,
+  },
+  section: { borderTopWidth: 1, borderBottomWidth: 1, marginBottom: Spacing.xs },
+  navRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: Spacing.md, paddingHorizontal: Spacing.md,
+    borderBottomWidth: 1, minHeight: 70,
+  },
+  navTextGroup: { flex: 1 },
+  navLabel: { fontWeight: '600' },
+  navDesc: { fontSize: 13, marginTop: 2 },
   navChevron: { fontSize: 24, fontWeight: '300' },
   footer: { alignItems: 'center', padding: Spacing.xl },
   version: {},

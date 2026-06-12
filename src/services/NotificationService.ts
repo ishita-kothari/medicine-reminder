@@ -1,6 +1,8 @@
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import * as TaskManager from 'expo-task-manager';
+import { Platform, Alert, Linking } from 'react-native';
 import { Reminder, Medication } from '../types';
+import { BACKGROUND_TASK_NAME } from '../constants/alertTiming';
 
 /**
  * Foreground handler — show notifications even when the app is open.
@@ -37,8 +39,21 @@ class NotificationService {
         lightColor: '#C62828',
       });
     }
+
+    // FIX: Register the background task so the OS can wake the app
+    // to check for missed doses. Without this call, defineTask() in
+    // backgroundTask.ts has no effect.
+    try {
+      const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_TASK_NAME);
+      if (!isRegistered) {
+        await Notifications.registerTaskAsync(BACKGROUND_TASK_NAME);
+      }
+    } catch {
+      // Background fetch not supported on all platforms (e.g. simulator)
+    }
   }
 
+  /** Returns true if granted, false if denied. Caller should warn user. */
   async requestPermissions(): Promise<boolean> {
     const { status: existing } = await Notifications.getPermissionsAsync();
     if (existing === 'granted') return true;
@@ -46,6 +61,18 @@ class NotificationService {
       ios: { allowAlert: true, allowBadge: true, allowSound: true },
     });
     return status === 'granted';
+  }
+
+  /** Show a user-facing warning if notifications were denied. */
+  showPermissionDeniedAlert(): void {
+    Alert.alert(
+      '🔔 Notifications Disabled',
+      'SeniorCare needs notifications to remind you about medicines. Please enable them in your device Settings.',
+      [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Open Settings', onPress: () => Linking.openSettings() },
+      ]
+    );
   }
 
   /**

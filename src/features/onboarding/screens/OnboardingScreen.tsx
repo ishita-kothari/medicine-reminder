@@ -51,7 +51,7 @@ export default function OnboardingScreen() {
 
   const handleProfileSubmit = (data: ProfileFormData) => {
     dispatch(createProfile({ name: data.name, age: 0, emergencyContact: data.emergencyContact ?? '' }));
-    goToPage(1);
+    goToPage(2);
   };
 
   const handleFinish = () => {
@@ -97,6 +97,42 @@ export default function OnboardingScreen() {
   );
 
   const pages = [
+    // Page 0: App introduction
+    <View key="p0" style={[styles.page, { width }]}>
+      <Text style={styles.pageEmoji} accessible={false}>💊</Text>
+      <Text
+        accessible
+        accessibilityRole="header"
+        style={[styles.pageTitle, { color: colors.text, fontSize: Typography.heading.fontSize * textScale }]}
+      >
+        SeniorCare Companion
+      </Text>
+      <Text style={[styles.pageSubtitle, { color: colors.textSecondary, fontSize: Typography.body.fontSize * textScale }]}>
+        Your trusted medicine reminder app — designed to be simple, safe, and supportive.
+      </Text>
+      {[
+        { icon: '⏰', text: 'Reminds you to take medicines on time' },
+        { icon: '👨‍👩‍👧', text: 'Notifies family if a dose is missed' },
+        { icon: '🔥', text: 'Tracks your streaks and healthy habits' },
+        { icon: '🆘', text: 'One-tap SOS to call for help' },
+      ].map((item) => (
+        <View key={item.text} style={[styles.featureRow, { borderColor: colors.border }]}>
+          <Text style={styles.featureIcon}>{item.icon}</Text>
+          <Text style={[styles.featureText, { color: colors.text, fontSize: Typography.body.fontSize * textScale }]}>
+            {item.text}
+          </Text>
+        </View>
+      ))}
+      <BigButton
+        label="Get Started →"
+        onPress={() => goToPage(1)}
+        variant="primary"
+        size="large"
+        style={styles.nextBtn}
+        accessibilityHint="Double-tap to start setting up your profile"
+      />
+    </View>,
+
     // Page 1: Name & emergency contact
     <View key="p1" style={[styles.page, { width }]}>
       <Text style={styles.pageEmoji} accessible={false}>👋</Text>
@@ -242,6 +278,13 @@ const styles = StyleSheet.create({
   pageEmoji: { fontSize: 64, textAlign: 'center', marginBottom: Spacing.md },
   pageTitle: { ...Typography.heading, textAlign: 'center', marginBottom: Spacing.sm },
   pageSubtitle: { ...Typography.body, textAlign: 'center', marginBottom: Spacing.lg, lineHeight: 26 },
+  featureRow: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: Spacing.sm, paddingVertical: 10, paddingHorizontal: Spacing.sm,
+    borderBottomWidth: 1, width: '100%',
+  },
+  featureIcon: { fontSize: 26, width: 36, textAlign: 'center' },
+  featureText: { flex: 1, lineHeight: 24 },
   nextBtn: { marginTop: Spacing.md },
   skipText: { textAlign: 'center', marginTop: Spacing.lg, fontSize: 16 },
   switchList: { borderRadius: 12, overflow: 'hidden', marginBottom: Spacing.md },

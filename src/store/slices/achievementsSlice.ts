@@ -1,6 +1,7 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { AchievementsState, AchievementId, Achievement } from '../../types';
 import { nowISO, todayDateString } from '../../utils/dateHelpers';
+import { ReminderEvent } from '../../types';
 
 const BADGE_DEFINITIONS: Record<AchievementId, Omit<Achievement, 'unlockedAt'>> = {
   first_dose:    { id: 'first_dose',    title: 'First Dose',    description: 'Took your very first medication', emoji: '🌟' },
@@ -28,6 +29,16 @@ const initialState: AchievementsState = {
   newlyUnlocked: [],
 };
 
+/** Check if every event in the last N days is 'taken' or 'skipped' (not missed). */
+function hasPerfectPeriod(allEvents: Record<string, ReminderEvent[]>, days: number): boolean {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  const flat = (Object.values(allEvents) as ReminderEvent[][]).flat();
+  const inPeriod = flat.filter((e) => new Date(e.scheduledAt) >= cutoff);
+  if (inPeriod.length === 0) return false;
+  return inPeriod.every((e) => e.status === 'taken' || e.status === 'skipped');
+}
+
 const achievementsSlice = createSlice({
   name: 'achievements',
   initialState,
@@ -37,7 +48,6 @@ const achievementsSlice = createSlice({
       const today = todayDateString();
       const now = nowISO();
 
-      // Streak logic
       if (state.lastStreakDate === null) {
         state.currentStreak = 1;
       } else {
@@ -47,7 +57,7 @@ const achievementsSlice = createSlice({
         if (diffDays === 1) {
           state.currentStreak += 1;
         } else if (diffDays === 0) {
-          // Same day — no change to streak
+          // same day — no change
         } else {
           state.currentStreak = 1;
         }
@@ -68,6 +78,26 @@ const achievementsSlice = createSlice({
       if (state.totalDosesTaken >= 100) unlock('doses_100');
       if (state.currentStreak >= 7) unlock('streak_7');
       if (state.currentStreak >= 30) unlock('streak_30');
+    },
+
+    /**
+     * checkPerfectPeriods — called on every app resume with the full event history.
+     * Auto-unlocks Perfect Week and Perfect Month if every dose in the past
+     * 7 or 30 days has status 'taken' or 'skipped'.
+     */
+    checkPerfectPeriods(
+      state,
+      action: PayloadAction<Record<string, ReminderEvent[]>>
+    ) {
+      const now = nowISO();
+      if (!state.badges.perfect_week.unlockedAt && hasPerfectPeriod(action.payload, 7)) {
+        state.badges.perfect_week.unlockedAt = now;
+        state.newlyUnlocked.push('perfect_week');
+      }
+      if (!state.badges.perfect_month.unlockedAt && hasPerfectPeriod(action.payload, 30)) {
+        state.badges.perfect_month.unlockedAt = now;
+        state.newlyUnlocked.push('perfect_month');
+      }
     },
 
     recordPerfectWeek(state) {
@@ -96,6 +126,7 @@ const achievementsSlice = createSlice({
 
 export const {
   recordDoseTaken,
+  checkPerfectPeriods,
   recordPerfectWeek,
   recordPerfectMonth,
   clearNewlyUnlocked,
