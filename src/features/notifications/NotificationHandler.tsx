@@ -137,115 +137,135 @@ export default function NotificationHandler() {
     }
   };
 
-  useEffect(() => {
-    // ── 1. Notification response listener ─────────────────────────────────
-    /**
-     * Handles three cases:
-     *   a) User tapped "✅ Taken" action button → mark taken, no modal
-     *   b) User tapped "⏰ Snooze 10 min" action button → reschedule, no modal
-     *   c) User tapped the notification itself (default tap) → open modal
-     *
-     * The actionIdentifier distinguishes these:
-     *   ACTION_MARK_TAKEN  → 'MARK_TAKEN'
-     *   ACTION_SNOOZE_10   → 'SNOOZE_10'
-     *   Default tap         → Notifications.DEFAULT_ACTION_IDENTIFIER
-     */
-    const responseSub = Notifications.addNotificationResponseReceivedListener(async (response) => {
-      const data = response.notification.request.content.data as {
-        reminderId?: string;
-        medicationId?: string;
-        scheduledTimeSlot?: string;
-        medicationName?: string;
-        snoozeMinutes?: number;
-        type?: string;
-      };
+  /**
+   * handleNotificationResponse — async business logic extracted from the listener.
+   *
+   * WHY EXTRACTED: addNotificationResponseReceivedListener expects a SYNCHRONOUS
+   * callback. Passing an async callback directly means any thrown error or
+   * rejected promise inside it becomes an UNHANDLED rejection, triggering
+   * "rejectionTracingOptions.onUnhandled" crash in React Native.
+   *
+   * FIX: keep the listener synchronous, call this async function inside it,
+   * and catch all errors explicitly so they never propagate to the native bridge.
+   */
+  const handleNotificationResponse = async (
+    response: Notifications.NotificationResponse
+  ): Promise<void> => {
+    const data = response.notification.request.content.data as {
+      reminderId?: string;
+      medicationId?: string;
+      scheduledTimeSlot?: string;
+      medicationName?: string;
+      snoozeMinutes?: number;
+      type?: string;
+    };
 
-      if (!data.reminderId || !data.medicationId) return;
+    if (!data.reminderId || !data.medicationId) return;
 
-      const timeSlot = data.scheduledTimeSlot ?? '08:00';
-      const scheduledAt = response.notification.date
-        ? new Date(response.notification.date * 1000).toISOString()
-        : nowISO();
-      const reminder = reminders[data.reminderId];
-      const medication = medications[data.medicationId];
+    const timeSlot = data.scheduledTimeSlot ?? '08:00';
+    const scheduledAt = response.notification.date
+      ? new Date(response.notification.date * 1000).toISOString()
+      : nowISO();
 
-      // Always create an event first (or find the existing pending one)
-      const existingEvents = events[data.reminderId] ?? [];
-      const existing = existingEvents.find(
-        (e) =>
-          e.scheduledTimeSlot === timeSlot &&
-          e.scheduledAt.startsWith(scheduledAt.slice(0, 10)) &&
-          (e.status === 'pending' || e.status === 'snoozed')
+    // Snapshot Redux state at the time of the response
+    const reminder = reminders[data.reminderId];
+    const medication = medications[data.medicationId];
+    const existingEvents = events[data.reminderId] ?? [];
+    const existing = existingEvents.find(
+      (e) =>
+        e.scheduledTimeSlot === timeSlot &&
+        e.scheduledAt.startsWith(scheduledAt.slice(0, 10)) &&
+        (e.status === 'pending' || e.status === 'snoozed')
+    );
+
+    const eventId = existing?.id ?? generateId();
+    if (!existing) {
+      dispatch(
+        addReminderEvent({
+          id: eventId,
+          reminderId: data.reminderId,
+          medicationId: data.medicationId,
+          scheduledTimeSlot: timeSlot,
+          scheduledAt,
+          status: 'pending',
+          takenAt: null,
+          snoozeCount: 0,
+          snoozedUntil: null,
+        })
       );
+    }
 
-      const eventId = existing?.id ?? generateId();
-      if (!existing) {
-        dispatch(
-          addReminderEvent({
-            id: eventId,
-            reminderId: data.reminderId,
-            medicationId: data.medicationId,
-            scheduledTimeSlot: timeSlot,
-            scheduledAt,
-            status: 'pending',
-            takenAt: null,
-            snoozeCount: 0,
-            snoozedUntil: null,
-          })
+    const actionId = response.actionIdentifier;
+
+    // ── a) "✅ Taken" action button ───────────────────────────────────────
+    if (actionId === ACTION_MARK_TAKEN) {
+      dispatch(markTaken({ reminderId: data.reminderId, eventId }));
+      dispatch(recordDoseTaken());
+      dispatch(decrementPillCount(data.medicationId));
+      // Cancel OS notifications safely — guard against missing reminder
+      if (reminder?.notificationIds?.length) {
+        await notificationService.cancelReminder(reminder.notificationIds).catch(() => {});
+      }
+      if (reminder?.voiceEnabled) {
+        Speech.speak(
+          `${data.medicationName ?? medication?.name ?? 'Medication'} marked as taken. Well done!`,
+          { rate: 0.85 }
         );
       }
+      return;
+    }
 
-      const actionId = response.actionIdentifier;
+    // ── b) "⏰ Snooze 10 min" action button ──────────────────────────────
+    if (actionId === ACTION_SNOOZE_10) {
+      const snoozeMinutes = (data.snoozeMinutes as 5 | 10 | 15) ?? 10;
+      const snoozedUntil = addMinutesToISO(nowISO(), snoozeMinutes);
+      const currentSnoozeCount = existing?.snoozeCount ?? 0;
 
-      // ── a) "✅ Taken" action button ─────────────────────────────────────
-      if (actionId === ACTION_MARK_TAKEN) {
-        dispatch(markTaken({ reminderId: data.reminderId, eventId }));
-        dispatch(recordDoseTaken());
-        dispatch(decrementPillCount(data.medicationId));
-        if (reminder) notificationService.cancelReminder(reminder.notificationIds);
-        // Announce if voice enabled on this reminder
+      if (currentSnoozeCount >= 1) {
+        dispatch(markMissed({ reminderId: data.reminderId, eventId }));
         if (reminder?.voiceEnabled) {
           Speech.speak(
-            `${data.medicationName ?? medication?.name ?? 'Medication'} marked as taken. Well done!`,
+            "Dose marked as missed. You can still take it from Today's Schedule.",
             { rate: 0.85 }
           );
         }
-        return; // No modal
-      }
-
-      // ── b) "⏰ Snooze 10 min" action button ─────────────────────────────
-      if (actionId === ACTION_SNOOZE_10) {
-        const snoozeMinutes = (data.snoozeMinutes as 5 | 10 | 15) ?? 10;
-        const snoozedUntil = addMinutesToISO(nowISO(), snoozeMinutes);
-        const currentSnoozeCount = existing?.snoozeCount ?? 0;
-
-        if (currentSnoozeCount >= 1) {
-          // Second snooze → mark missed
-          dispatch(markMissed({ reminderId: data.reminderId, eventId }));
-          if (reminder?.voiceEnabled) {
-            Speech.speak('Dose marked as missed. You can still take it from Today\'s Schedule.', { rate: 0.85 });
-          }
-        } else {
-          dispatch(snoozeReminder({ reminderId: data.reminderId, eventId, snoozedUntil }));
-          if (reminder && medication) {
-            const newIds = await notificationService.snooze(reminder, medication, snoozeMinutes, timeSlot);
+      } else {
+        dispatch(snoozeReminder({ reminderId: data.reminderId, eventId, snoozedUntil }));
+        if (reminder && medication) {
+          const newIds = await notificationService
+            .snooze(reminder, medication, snoozeMinutes, timeSlot)
+            .catch(() => [] as string[]);
+          if (newIds.length) {
             dispatch(updateNotificationIds({ reminderId: data.reminderId, notificationIds: newIds }));
           }
-          if (reminder?.voiceEnabled) {
-            Speech.speak(`Reminder snoozed for ${snoozeMinutes} minutes.`, { rate: 0.85 });
-          }
         }
-        return; // No modal
+        if (reminder?.voiceEnabled) {
+          Speech.speak(`Reminder snoozed for ${snoozeMinutes} minutes.`, { rate: 0.85 });
+        }
       }
+      return;
+    }
 
-      // ── c) Default tap → open full ReminderAlertModal ───────────────────
-      dispatch(
-        openReminderAlert({
-          reminderId: data.reminderId,
-          medicationId: data.medicationId,
-          timeSlot,
-        })
-      );
+    // ── c) Default tap → open full ReminderAlertModal ────────────────────
+    dispatch(
+      openReminderAlert({
+        reminderId: data.reminderId,
+        medicationId: data.medicationId,
+        timeSlot,
+      })
+    );
+  };
+
+  useEffect(() => {
+    // ── 1. Notification response listener — SYNCHRONOUS wrapper ──────────
+    // Listener is synchronous; async work is done in handleNotificationResponse
+    // with a .catch() so unhandled rejections never reach the native bridge.
+    const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      handleNotificationResponse(response).catch((err) => {
+        if (__DEV__) {
+          console.error('[NotificationHandler] unhandled error in response handler:', err);
+        }
+      });
     });
 
     // ── 2. Foreground notification listener — speak if voiceEnabled ────────
