@@ -20,7 +20,7 @@ const initialState: SettingsState = {
   darkMode: false,
   highContrast: false,
   largeText: false,
-  voiceGuidance: false,
+  voiceGuidance: true,   // ON by default — seniors benefit from audio confirmation
   vibration: true,
   fontScale: 1.0,
   reducedMotion: false,

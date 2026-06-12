@@ -54,7 +54,7 @@ export default function AddEditReminderScreen() {
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>(
     existingReminder?.daysOfWeek ?? [0, 1, 2, 3, 4, 5, 6]
   );
-  const [voiceEnabled, setVoiceEnabled] = useState(existingReminder?.voiceEnabled ?? false);
+  const [voiceEnabled, setVoiceEnabled] = useState(existingReminder?.voiceEnabled ?? true); // ON by default
   const [vibrationEnabled, setVibrationEnabled] = useState(existingReminder?.vibrationEnabled ?? true);
   const [notifyFamilyIfMissed, setNotifyFamilyIfMissed] = useState(
     existingReminder?.notifyFamilyIfMissed ?? true

@@ -186,8 +186,9 @@ export default function NotificationHandler() {
       const reminder = data.reminderId ? reminders[data.reminderId] : undefined;
       const medication = data.medicationId ? medications[data.medicationId] : undefined;
 
-      // Speak announcement if this reminder has voiceEnabled
-      if (reminder?.voiceEnabled && medication && settings.voiceGuidance) {
+      // Speak if reminder.voiceEnabled is true — independent of global voiceGuidance.
+      // voiceEnabled is a PER-REMINDER setting; voiceGuidance is for UI confirmations.
+      if (reminder?.voiceEnabled && medication) {
         const timeSlot = data.scheduledTimeSlot
           ? `at ${formatTimeFromHHMM(data.scheduledTimeSlot)}`
           : '';
