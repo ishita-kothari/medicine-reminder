@@ -17,3 +17,4 @@ coverage/
 *.keystore
 *.keystore.b64
 credentials.json
+*.DS_Store

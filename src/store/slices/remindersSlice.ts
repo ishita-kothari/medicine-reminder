@@ -153,6 +153,23 @@ const remindersSlice = createSlice({
       state.activeAlertTimeSlot = null;
     },
 
+    /**
+     * markTakenLate — user confirms a previously-missed dose was actually taken
+     * WHY: Seniors sometimes forget to tap TAKEN in the modal but did take the
+     * medicine. This action corrects the record retrospectively and keeps the
+     * adherence score accurate.
+     */
+    markTakenLate(state, action: PayloadAction<{ reminderId: string; eventId: string }>) {
+      const events = state.events[action.payload.reminderId];
+      if (events) {
+        const event = events.find((e) => e.id === action.payload.eventId);
+        if (event && (event.status === 'missed' || event.status === 'snoozed')) {
+          event.status = 'taken';
+          event.takenAt = nowISO();
+        }
+      }
+    },
+
     updateNotificationIds(
       state,
       action: PayloadAction<{ reminderId: string; notificationIds: string[] }>
@@ -183,6 +200,7 @@ export const {
   addReminderEvent,
   markTaken,
   markMissed,
+  markTakenLate,
   autoMarkExpiredSnoozedMissed,
   skipReminder,
   snoozeReminder,
