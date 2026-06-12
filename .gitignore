@@ -18,3 +18,4 @@ coverage/
 *.keystore.b64
 credentials.json
 *.DS_Store
+.vercel

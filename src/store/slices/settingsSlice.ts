@@ -24,7 +24,8 @@ const initialState: SettingsState = {
   vibration: true,
   fontScale: 1.0,
   reducedMotion: false,
-  alertBackendUrl: '',
+  // Pre-filled with the deployed Vercel backend URL
+  alertBackendUrl: 'https://seniorcare-api-teal.vercel.app',
   twilioSmsEnabled: false,
   resendEmailEnabled: false,
 };
