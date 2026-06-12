@@ -1,15 +1,33 @@
+/**
+ * NotificationService.ts
+ *
+ * Wraps expo-notifications for scheduling, action handling, and snoozing.
+ *
+ * NOTIFICATION ACTION BUTTONS
+ * ───────────────────────────
+ * We register a category "medication_reminder" with two action buttons:
+ *   • MARK_TAKEN  — "✅ Taken"       (dismisses notification, marks dose taken)
+ *   • SNOOZE_10   — "⏰ Snooze 10 min" (reschedules a one-shot notification)
+ *
+ * How users interact with them:
+ *   iOS  : Long-press the notification banner OR swipe left on lock screen
+ *          → buttons appear inline without opening the app
+ *   Android: Buttons appear directly in the notification drawer below the text
+ *
+ * The responses are handled in NotificationHandler.tsx via
+ * addNotificationResponseReceivedListener, which checks actionIdentifier
+ * before deciding whether to open the ReminderAlertModal.
+ */
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { Platform, Alert, Linking } from 'react-native';
 import { Reminder, Medication } from '../types';
 import { BACKGROUND_TASK_NAME } from '../constants/alertTiming';
 
-/**
- * Foreground handler — show notifications even when the app is open.
- * Background/closed delivery is handled by the OS once a CalendarTrigger
- * is scheduled; no extra config is needed beyond setting permissions and
- * having UIBackgroundModes (fetch, remote-notification) in app.json.
- */
+export const NOTIFICATION_CATEGORY = 'medication_reminder';
+export const ACTION_MARK_TAKEN = 'MARK_TAKEN';
+export const ACTION_SNOOZE_10 = 'SNOOZE_10';
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -40,9 +58,31 @@ class NotificationService {
       });
     }
 
-    // FIX: Register the background task so the OS can wake the app
-    // to check for missed doses. Without this call, defineTask() in
-    // backgroundTask.ts has no effect.
+    // Register interactive action buttons on the notification
+    // iOS: long-press banner or swipe lock-screen notification → buttons appear
+    // Android: buttons appear inline in the notification drawer
+    await Notifications.setNotificationCategoryAsync(NOTIFICATION_CATEGORY, [
+      {
+        identifier: ACTION_MARK_TAKEN,
+        buttonTitle: '✅ Taken',
+        options: {
+          opensAppToForeground: true,  // opens app briefly for audio confirmation
+          isDestructive: false,
+          isAuthenticationRequired: false,
+        },
+      },
+      {
+        identifier: ACTION_SNOOZE_10,
+        buttonTitle: '⏰ Snooze 10 min',
+        options: {
+          opensAppToForeground: false, // reschedule without opening app
+          isDestructive: false,
+          isAuthenticationRequired: false,
+        },
+      },
+    ]);
+
+    // Register background task so OS can wake the app for missed-dose checks
     try {
       const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_TASK_NAME);
       if (!isRegistered) {
@@ -53,21 +93,25 @@ class NotificationService {
     }
   }
 
-  /** Returns true if granted, false if denied. Caller should warn user. */
+  /** Returns true if granted, false if denied. */
   async requestPermissions(): Promise<boolean> {
     const { status: existing } = await Notifications.getPermissionsAsync();
     if (existing === 'granted') return true;
     const { status } = await Notifications.requestPermissionsAsync({
-      ios: { allowAlert: true, allowBadge: true, allowSound: true },
+      ios: {
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true,
+        allowCriticalAlerts: false,
+      },
     });
     return status === 'granted';
   }
 
-  /** Show a user-facing warning if notifications were denied. */
   showPermissionDeniedAlert(): void {
     Alert.alert(
       '🔔 Notifications Disabled',
-      'SeniorCare needs notifications to remind you about medicines. Please enable them in your device Settings.',
+      'SeniorCare needs notifications to remind you to take medicines. Please enable them in your device Settings.',
       [
         { text: 'Not now', style: 'cancel' },
         { text: 'Open Settings', onPress: () => Linking.openSettings() },
@@ -77,13 +121,7 @@ class NotificationService {
 
   /**
    * Schedule one OS notification per (time-slot × weekday) pair.
-   * Returns all notification IDs created so they can be stored for later cancellation.
-   *
-   * How background delivery works:
-   *   CalendarTrigger with repeats:true is registered with the OS scheduler.
-   *   The OS fires it at the exact time regardless of app state (foreground,
-   *   background, or terminated). On iOS this requires notification permissions;
-   *   on Android it requires the notification channel to be created first.
+   * Each notification has action buttons (TAKEN / SNOOZE) via categoryIdentifier.
    */
   async scheduleReminder(reminder: Reminder, medication: Medication): Promise<string[]> {
     const granted = await this.requestPermissions();
@@ -99,25 +137,34 @@ class NotificationService {
     const notificationIds: string[] = [];
 
     for (const timeSlot of times) {
-      const [hours, minutes] = timeSlot.split(':').map(Number);
+      const [hours, mins] = timeSlot.split(':').map(Number);
       for (const weekday of daysToSchedule) {
         const id = await Notifications.scheduleNotificationAsync({
           content: {
             title: `💊 Time for ${medication.name}`,
-            body: `${medication.dosage} ${medication.unit}${medication.instructions ? ` — ${medication.instructions}` : ''}`,
+            body:
+              `${medication.dosage} ${medication.unit}` +
+              (medication.instructions ? ` — ${medication.instructions}` : '') +
+              `\nTap to confirm or long-press for quick actions`,
             data: {
               reminderId: reminder.id,
               medicationId: medication.id,
               scheduledTimeSlot: timeSlot,
+              medicationName: medication.name,
+              dosage: medication.dosage,
+              unit: medication.unit,
+              snoozeMinutes: reminder.snoozeMinutes,
               type: 'medication_reminder',
             },
             sound: 'default',
+            // Links this notification to the category with action buttons
+            categoryIdentifier: NOTIFICATION_CATEGORY,
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
             hour: hours!,
-            minute: minutes!,
-            weekday: weekday + 1, // Expo weekday: 1=Sun … 7=Sat
+            minute: mins!,
+            weekday: weekday + 1,
             repeats: true,
           },
         });
@@ -130,15 +177,12 @@ class NotificationService {
 
   async cancelReminder(notificationIds: string[]): Promise<void> {
     await Promise.all(
-      notificationIds.map((id) => Notifications.cancelScheduledNotificationAsync(id).catch(() => {}))
+      notificationIds.map((id) =>
+        Notifications.cancelScheduledNotificationAsync(id).catch(() => {})
+      )
     );
   }
 
-  /**
-   * Schedule a one-shot snooze notification.
-   * The original repeating notifications are NOT re-cancelled here — they are
-   * already cancelled by the caller before snooze() is invoked.
-   */
   async snooze(
     reminder: Reminder,
     medication: Medication,
@@ -151,14 +195,21 @@ class NotificationService {
     const id = await Notifications.scheduleNotificationAsync({
       content: {
         title: `⏰ Snoozed: ${medication.name}`,
-        body: `${minutes}-minute snooze — please take your ${medication.dosage} ${medication.unit} now`,
+        body:
+          `${minutes}-min snooze — take your ${medication.dosage} ${medication.unit} now.\n` +
+          `Long-press for quick actions`,
         data: {
           reminderId: reminder.id,
           medicationId: medication.id,
           scheduledTimeSlot: timeSlot,
+          medicationName: medication.name,
+          dosage: medication.dosage,
+          unit: medication.unit,
+          snoozeMinutes: reminder.snoozeMinutes,
           type: 'medication_snooze',
         },
         sound: 'default',
+        categoryIdentifier: NOTIFICATION_CATEGORY,
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -168,11 +219,6 @@ class NotificationService {
     return [id];
   }
 
-  /**
-   * Called every time the app returns to foreground.
-   * Re-schedules any reminders whose OS notifications were dropped (e.g. after
-   * phone restart on Android, or iOS background-kill purge).
-   */
   async rescheduleAll(
     reminders: Reminder[],
     medications: Record<string, Medication>
@@ -189,7 +235,9 @@ class NotificationService {
         (reminder.scheduledTimes?.length ?? 1) *
         (reminder.daysOfWeek.length === 0 ? 7 : reminder.daysOfWeek.length);
 
-      const presentCount = reminder.notificationIds.filter((id) => scheduledIds.has(id)).length;
+      const presentCount = reminder.notificationIds.filter((id) =>
+        scheduledIds.has(id)
+      ).length;
 
       if (presentCount < expectedCount) {
         await this.cancelReminder(reminder.notificationIds);
