@@ -20,8 +20,17 @@ interface TimePickerProps {
   label?: string;
 }
 
+/** Returns true if the string is a valid HH:mm value (00:00 – 23:59) */
+export function isValidHHMM(value: string): boolean {
+  if (!/^\d{2}:\d{2}$/.test(value)) return false;
+  const [h, m] = value.split(':').map(Number);
+  return (h ?? -1) >= 0 && (h ?? 24) <= 23 && (m ?? -1) >= 0 && (m ?? 60) <= 59;
+}
+
+/** Parses HH:mm → Date, falling back to 08:00 for corrupted strings */
 function hhMmToDate(hhMm: string): Date {
-  const [h, m] = hhMm.split(':').map(Number);
+  const safe = isValidHHMM(hhMm) ? hhMm : '08:00';
+  const [h, m] = safe.split(':').map(Number);
   const d = new Date();
   d.setHours(h ?? 8, m ?? 0, 0, 0);
   return d;

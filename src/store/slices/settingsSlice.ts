@@ -8,6 +8,12 @@ export interface SettingsState {
   vibration: boolean;
   fontScale: number;
   reducedMotion: boolean;
+  /** URL of the deployed Vercel backend (e.g. https://my-app.vercel.app) */
+  alertBackendUrl: string;
+  /** Whether to use Twilio automatic SMS instead of the native SMS composer */
+  twilioSmsEnabled: boolean;
+  /** Whether to send email alerts via Resend */
+  resendEmailEnabled: boolean;
 }
 
 const initialState: SettingsState = {
@@ -18,36 +24,32 @@ const initialState: SettingsState = {
   vibration: true,
   fontScale: 1.0,
   reducedMotion: false,
+  alertBackendUrl: '',
+  twilioSmsEnabled: false,
+  resendEmailEnabled: false,
 };
 
 const settingsSlice = createSlice({
   name: 'settings',
   initialState,
   reducers: {
-    toggleDarkMode(state) {
-      state.darkMode = !state.darkMode;
-    },
-    toggleHighContrast(state) {
-      state.highContrast = !state.highContrast;
-    },
-    toggleLargeText(state) {
-      state.largeText = !state.largeText;
-    },
-    toggleVoiceGuidance(state) {
-      state.voiceGuidance = !state.voiceGuidance;
-    },
-    toggleVibration(state) {
-      state.vibration = !state.vibration;
-    },
+    toggleDarkMode(state) { state.darkMode = !state.darkMode; },
+    toggleHighContrast(state) { state.highContrast = !state.highContrast; },
+    toggleLargeText(state) { state.largeText = !state.largeText; },
+    toggleVoiceGuidance(state) { state.voiceGuidance = !state.voiceGuidance; },
+    toggleVibration(state) { state.vibration = !state.vibration; },
     setFontScale(state, action: PayloadAction<number>) {
       state.fontScale = Math.max(0.8, Math.min(2.0, action.payload));
     },
     setReducedMotion(state, action: PayloadAction<boolean>) {
       state.reducedMotion = action.payload;
     },
-    resetSettings(state) {
-      return initialState;
+    setAlertBackendUrl(state, action: PayloadAction<string>) {
+      state.alertBackendUrl = action.payload.trim();
     },
+    toggleTwilioSms(state) { state.twilioSmsEnabled = !state.twilioSmsEnabled; },
+    toggleResendEmail(state) { state.resendEmailEnabled = !state.resendEmailEnabled; },
+    resetSettings(_state) { return initialState; },
   },
 });
 
@@ -59,6 +61,9 @@ export const {
   toggleVibration,
   setFontScale,
   setReducedMotion,
+  setAlertBackendUrl,
+  toggleTwilioSms,
+  toggleResendEmail,
   resetSettings,
 } = settingsSlice.actions;
 

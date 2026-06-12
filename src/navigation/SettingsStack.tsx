@@ -5,6 +5,7 @@ import SettingsScreen from '../features/settings/screens/SettingsScreen';
 import AccessibilitySettingsScreen from '../features/settings/screens/AccessibilitySettingsScreen';
 import EditProfileScreen from '../features/settings/screens/EditProfileScreen';
 import DataExportScreen from '../features/settings/screens/DataExportScreen';
+import AlertSettingsScreen from '../features/settings/screens/AlertSettingsScreen';
 import { useAccessibility } from '../hooks/useAccessibility';
 
 const Stack = createStackNavigator<SettingsStackParamList>();
@@ -23,6 +24,7 @@ export default function SettingsStack() {
       <Stack.Screen name="AccessibilitySettings" component={AccessibilitySettingsScreen} options={{ title: 'Accessibility' }} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: 'Edit Profile' }} />
       <Stack.Screen name="DataExport" component={DataExportScreen} options={{ title: 'Export Data' }} />
+      <Stack.Screen name="AlertSettings" component={AlertSettingsScreen} options={{ title: 'Alert Settings' }} />
     </Stack.Navigator>
   );
 }

@@ -38,4 +38,5 @@ export type SettingsStackParamList = {
   AccessibilitySettings: undefined;
   EditProfile: undefined;
   DataExport: undefined;
+  AlertSettings: undefined;
 };

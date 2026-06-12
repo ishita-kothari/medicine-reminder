@@ -108,6 +108,11 @@ export default function SettingsScreen() {
         <NavRow label="Accessibility Options" desc="High contrast, large text, font size" screen="AccessibilitySettings" />
       </View>
 
+      {sectionLabel('Alerts')}
+      <View style={[styles.section, { backgroundColor: colors.surface }]}>
+        <NavRow label="Alert Settings" desc="Automatic SMS & email via Twilio / Resend backend" screen="AlertSettings" />
+      </View>
+
       {sectionLabel('Data')}
       <View style={[styles.section, { backgroundColor: colors.surface }]}>
         <NavRow label="Export Dose History" desc="Share a CSV report with your doctor" screen="DataExport" />

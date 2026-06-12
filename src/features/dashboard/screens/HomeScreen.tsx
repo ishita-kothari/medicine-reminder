@@ -31,6 +31,7 @@ import {
   RefreshControl,
   TouchableOpacity,
 } from 'react-native';
+import { useNavigation, CommonActions } from '@react-navigation/native';
 import { useAppSelector } from '../../../hooks/useAppSelector';
 import { useAppDispatch } from '../../../hooks/useAppDispatch';
 import { useAccessibility } from '../../../hooks/useAccessibility';
@@ -73,6 +74,7 @@ interface ScheduleSlot {
 
 export default function HomeScreen() {
   const dispatch = useAppDispatch();
+  const navigation = useNavigation();
   const { colors, textScale, speak, haptic } = useAccessibility();
   const [refreshing, setRefreshing] = useState(false);
   const [countdown, setCountdown] = useState('--:--:--');
@@ -578,6 +580,27 @@ export default function HomeScreen() {
             })()}
           </View>
         )}
+
+        {/* ── Alert History shortcut ───────────────────────────────────── */}
+        <TouchableOpacity
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel="View alert history"
+          accessibilityHint="Double-tap to see all missed-dose and wellness alerts"
+          onPress={() =>
+            navigation.dispatch(
+              CommonActions.navigate({ name: 'FamilyTab' })
+            )
+          }
+          style={[styles.historyLink, { borderColor: colors.border }]}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.historyLinkIcon} accessible={false}>📋</Text>
+          <Text style={[styles.historyLinkText, { color: colors.textSecondary, fontSize: Typography.body.fontSize * textScale }]}>
+            View Alert History
+          </Text>
+          <Text style={[styles.historyLinkChevron, { color: colors.textDisabled }]}>›</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       <ReminderAlertModal />
@@ -672,4 +695,12 @@ const styles = StyleSheet.create({
   statusIcon: { fontSize: 24, marginHorizontal: Spacing.sm },
   tickBtn: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginHorizontal: Spacing.xs },
   tickBtnText: { color: '#FFF', fontSize: 22, fontWeight: '900' },
+  historyLink: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1, borderRadius: Layout.inputBorderRadius,
+    padding: Spacing.md, marginTop: Spacing.md, gap: Spacing.sm,
+  },
+  historyLinkIcon: { fontSize: 20 },
+  historyLinkText: { flex: 1 },
+  historyLinkChevron: { fontSize: 20 },
 });
